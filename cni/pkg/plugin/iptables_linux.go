@@ -50,6 +50,7 @@ func (ipt *iptables) Program(podName, netns string, rdrct *Redirect) error {
 	viper.Set(constants.ServiceExcludeCidr, rdrct.excludeIPCidrs)
 	viper.Set(constants.KubeVirtInterfaces, rdrct.kubevirtInterfaces)
 	viper.Set(constants.DryRun, dependencies.DryRunFilePath.Get() != "")
+	viper.Set(constants.SupportForwarded, rdrct.supportForwarded)
 	viper.Set(constants.RedirectDNS, rdrct.dnsRedirect)
 	viper.Set(constants.CaptureAllDNS, rdrct.dnsRedirect)
 	viper.Set(constants.DropInvalid, rdrct.invalidDrop)
