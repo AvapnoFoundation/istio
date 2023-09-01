@@ -60,6 +60,7 @@ func constructConfig() *config.Config {
 		DryRun:                  viper.GetBool(constants.DryRun),
 		ProxyUID:                viper.GetString(constants.ProxyUID),
 		ProxyGID:                viper.GetString(constants.ProxyGID),
+		SupportForwarded:        viper.GetBool(constants.SupportForwarded),
 		RedirectDNS:             viper.GetBool(constants.RedirectDNS),
 		CaptureAllDNS:           viper.GetBool(constants.CaptureAllDNS),
 		OwnerGroupsInclude:      viper.GetString(constants.OwnerGroupsInclude.Name),
@@ -121,6 +122,11 @@ func bindFlags(cmd *cobra.Command, args []string) {
 	}
 	viper.SetDefault(constants.ProxyGID, "")
 
+	if err := viper.BindPFlag(constants.SupportForwarded, cmd.Flags().Lookup(constants.SupportForwarded)); err != nil {
+		handleError(err)
+	}
+	viper.SetDefault(constants.SupportForwarded, supportForwarded)
+
 	if err := viper.BindPFlag(constants.RedirectDNS, cmd.Flags().Lookup(constants.RedirectDNS)); err != nil {
 		handleError(err)
 	}
@@ -158,6 +164,8 @@ func init() {
 
 	rootCmd.Flags().StringP(constants.ProxyGID, "g", "",
 		"Specify the GID of the user for which the redirection is not applied. (same default value as -u param)")
+
+	rootCmd.Flags().Bool(constants.SupportForwarded, supportForwarded, "Add support for forwarded packets")
 
 	rootCmd.Flags().Bool(constants.RedirectDNS, dnsCaptureByAgent, "Enable capture of dns traffic by istio-agent")
 
