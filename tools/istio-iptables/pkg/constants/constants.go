@@ -102,6 +102,7 @@ const (
 	RunValidation             = "run-validation"
 	IptablesProbePort         = "iptables-probe-port"
 	ProbeTimeout              = "probe-timeout"
+	SupportForwarded          = "support-forwarded"
 	RedirectDNS               = "redirect-dns"
 	DropInvalid               = "drop-invalid"
 	CaptureAllDNS             = "capture-all-dns"
