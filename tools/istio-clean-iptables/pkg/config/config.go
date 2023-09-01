@@ -28,6 +28,7 @@ type Config struct {
 	DryRun                  bool     `json:"DRY_RUN"`
 	ProxyUID                string   `json:"PROXY_UID"`
 	ProxyGID                string   `json:"PROXY_GID"`
+	SupportForwarded        bool     `json:"SUPPORT_FORWARDED"`
 	RedirectDNS             bool     `json:"REDIRECT_DNS"`
 	DNSServersV4            []string `json:"DNS_SERVERS_V4"`
 	DNSServersV6            []string `json:"DNS_SERVERS_V6"`
@@ -51,6 +52,7 @@ func (c *Config) Print() {
 	fmt.Println("----------")
 	fmt.Printf("PROXY_UID=%s\n", c.ProxyUID)
 	fmt.Printf("PROXY_GID=%s\n", c.ProxyGID)
+	fmt.Printf("SUPPORT_FORWARDED=%t\n", c.SupportForwarded)
 	fmt.Printf("DNS_CAPTURE=%t\n", c.RedirectDNS)
 	fmt.Printf("CAPTURE_ALL_DNS=%t\n", c.CaptureAllDNS)
 	fmt.Printf("DNS_SERVERS=%s,%s\n", c.DNSServersV4, c.DNSServersV6)
