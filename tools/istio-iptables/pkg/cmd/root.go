@@ -38,12 +38,14 @@ import (
 
 var (
 	envoyUserVar = env.Register(constants.EnvoyUser, "istio-proxy", "Envoy proxy username")
+	supportForwarded = env.Register("ISTIO_META_SUPPORT_FORWARDED", false,
+		"If set to true, add support for forwarded packets").Get()
 	// Enable interception of DNS.
 	dnsCaptureByAgent = env.Register("ISTIO_META_DNS_CAPTURE", false,
 		"If set to true, enable the capture of outgoing DNS packets on port 53, redirecting to istio-agent on :15053").Get()
 	// InvalidDropByIptables is the flag to enable invalid drop iptables rule to drop the out of window packets
 	InvalidDropByIptables = env.Register("INVALID_DROP", false,
-		"If set to true, enable the invalid drop iptables rule, default false will cause iptables reset out of window packets")
+		"If set to true, enable the invalid drop iptables rule, default false will cause iptables reset out of window packets.")
 	DualStack = env.RegisterBoolVar("ISTIO_DUAL_STACK", false,
 		"If true, Istio will enable the Dual Stack feature.").Get()
 )
@@ -379,6 +381,11 @@ func bindFlags(cmd *cobra.Command, args []string) {
 	}
 	viper.SetDefault(constants.RunValidation, false)
 
+	if err := viper.BindPFlag(constants.SupportForwarded, cmd.Flags().Lookup(constants.SupportForwarded)); err != nil {
+		handleError(err)
+	}
+	viper.SetDefault(constants.RedirectDNS, supportForwarded)
+
 	if err := viper.BindPFlag(constants.RedirectDNS, cmd.Flags().Lookup(constants.RedirectDNS)); err != nil {
 		handleError(err)
 	}
@@ -481,6 +488,8 @@ func bindCmdlineFlags(rootCmd *cobra.Command) {
 	rootCmd.Flags().Bool(constants.SkipRuleApply, false, "Skip iptables apply.")
 
 	rootCmd.Flags().Bool(constants.RunValidation, false, "Validate iptables.")
+
+	rootCmd.Flags().Bool(constants.SupportForwarded, supportForwarded, "Add support for forwarded packets.")
 
 	rootCmd.Flags().Bool(constants.RedirectDNS, dnsCaptureByAgent, "Enable capture of dns traffic by istio-agent.")
 
