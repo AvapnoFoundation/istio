@@ -226,17 +226,23 @@ func (cfg *IptablesConfigurator) shortCircuitKubeInternalInterface() {
 }
 
 func (cfg *IptablesConfigurator) shortCircuitExcludeInterfaces() {
+	supportForwarded := cfg.cfg.supportForwarded
 	for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {
 		cfg.iptables.AppendRule(
 			iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.NAT, "-i", excludeInterface, "-j", constants.RETURN)
 		cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.OUTPUT, constants.NAT, "-o", excludeInterface, "-j", constants.RETURN)
+		if supportForwarded {
+			cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.FORWARD, constants.NAT, "-o", excludeInterface, "-j", constants.RETURN)
+		}
 	}
 	if cfg.cfg.InboundInterceptionMode == constants.TPROXY {
 		for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {
-
 			cfg.iptables.AppendRule(
 				iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.MANGLE, "-i", excludeInterface, "-j", constants.RETURN)
 			cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.OUTPUT, constants.MANGLE, "-o", excludeInterface, "-j", constants.RETURN)
+			if supportForwarded {
+				cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.FORWARD, constants.MANGLE, "-o", excludeInterface, "-j", constants.RETURN)
+			}
 		}
 	}
 }
@@ -305,6 +311,7 @@ func (cfg *IptablesConfigurator) Run() {
 	}
 
 	redirectDNS := cfg.cfg.RedirectDNS
+	supportForwarded := cfg.cfg.SupportForwarded
 	cfg.logConfig()
 
 	cfg.shortCircuitExcludeInterfaces()
@@ -341,6 +348,9 @@ func (cfg *IptablesConfigurator) Run() {
 	// iptablesOrFail wrapper (like ufw). Current default is similar with 0.1
 	// Jump to the ISTIOOUTPUT chain from OUTPUT chain for all tcp traffic, and UDP dns (if enabled)
 	cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.OUTPUT, constants.NAT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
+	if supportForwarded {
+		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.FORWARD, constants.NAT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
+	}
 	// Apply port based exclusions. Must be applied before connections back to self are redirected.
 	if cfg.cfg.OutboundPortsExclude != "" {
 		for _, port := range split(cfg.cfg.OutboundPortsExclude) {
@@ -500,10 +510,17 @@ func (cfg *IptablesConfigurator) Run() {
 
 	if redirectDNS {
 		HandleDNSUDP(
-			AppendOps, cfg.iptables, cfg.ext, "",
+			AppendOps, constants.NAT, constants.OUTPUT, cfg.iptables, cfg.ext, "",
 			cfg.cfg.ProxyUID, cfg.cfg.ProxyGID,
 			cfg.cfg.DNSServersV4, cfg.cfg.DNSServersV6, cfg.cfg.CaptureAllDNS,
 			ownerGroupsFilter)
+		if supportForwarded {
+			HandleDNSUDP(
+				AppendOps, constants.FILTER, constants.FORWARD, cfg.iptables, cfg.ext, "",
+				cfg.cfg.ProxyUID, cfg.cfg.ProxyGID,
+				cfg.cfg.DNSServersV4, cfg.cfg.DNSServersV6, cfg.cfg.CaptureAllDNS,
+				ownerGroupsFilter)
+		}
 	}
 
 	if cfg.cfg.InboundInterceptionMode == constants.TPROXY {
@@ -513,12 +530,21 @@ func (cfg *IptablesConfigurator) Run() {
 		// If the packet is already marked with 1337, then return. This is to prevent mark envoy --> app traffic again.
 		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 			"-p", constants.TCP, "-o", "lo", "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", constants.RETURN)
+		if supportForwarded {
+			cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
+				"-p", constants.TCP, "-o", "lo", "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", constants.RETURN)
+		}
 		for _, uid := range split(cfg.cfg.ProxyUID) {
 			// mark outgoing packets from envoy to workload by pod ip
 			// app call VIP --> envoy outbound -(mark 1338)-> envoy inbound --> app
 			cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 				"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
 				"-m", "owner", "--uid-owner", uid, "-j", constants.MARK, "--set-mark", outboundMark)
+			if supportForwarded {
+				cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
+					"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
+					"-m", "owner", "--uid-owner", uid, "-j", constants.MARK, "--set-mark", outboundMark)
+			}
 		}
 		for _, gid := range split(cfg.cfg.ProxyGID) {
 			// mark outgoing packets from envoy to workload by pod ip
@@ -526,10 +552,19 @@ func (cfg *IptablesConfigurator) Run() {
 			cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 				"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
 				"-m", "owner", "--gid-owner", gid, "-j", constants.MARK, "--set-mark", outboundMark)
+			if supportForwarded {
+				cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
+					"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
+					"-m", "owner", "--gid-owner", gid, "-j", constants.MARK, "--set-mark", outboundMark)
+			}
 		}
 		// mark outgoing packets from workload, match it to policy routing entry setup for TPROXY mode
 		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 			"-p", constants.TCP, "-m", "connmark", "--mark", cfg.cfg.InboundTProxyMark, "-j", "CONNMARK", "--restore-mark")
+		if supportForwarded {
+			cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
+				"-p", constants.TCP, "-m", "connmark", "--mark", cfg.cfg.InboundTProxyMark, "-j", "CONNMARK", "--restore-mark")
+		}
 		// prevent infinite redirect
 		cfg.iptables.InsertRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.MANGLE, 1,
 			"-p", constants.TCP, "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", constants.RETURN)
@@ -594,7 +629,7 @@ func (f UDPRuleApplier) WithTable(table string) UDPRuleApplier {
 // HandleDNSUDP is a helper function to tackle with DNS UDP specific operations.
 // This helps the creation logic of DNS UDP rules in sync with the deletion.
 func HandleDNSUDP(
-	ops Ops, iptables *builder.IptablesBuilder, ext dep.Dependencies,
+	ops Ops, table string, chain string, iptables *builder.IptablesBuilder, ext dep.Dependencies,
 	cmd, proxyUID, proxyGID string, dnsServersV4 []string, dnsServersV6 []string, captureAllDNS bool,
 	ownerGroupsFilter config.InterceptFilter,
 ) {
@@ -602,8 +637,8 @@ func HandleDNSUDP(
 		iptables: iptables,
 		ext:      ext,
 		ops:      ops,
-		table:    constants.NAT,
-		chain:    constants.OUTPUT,
+		table:    table,
+		chain:    chain,
 		cmd:      cmd,
 	}
 	// Make sure that upstream DNS requests from agent/envoy dont get captured.
