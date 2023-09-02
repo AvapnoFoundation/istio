@@ -87,6 +87,7 @@ type Redirect struct {
 	includeOutboundPorts string
 	kubevirtInterfaces   string
 	excludeInterfaces    string
+	supportForwarded     bool
 	dnsRedirect          bool
 	invalidDrop          bool
 	hostNSEnterExec      bool
@@ -277,6 +278,13 @@ func NewRedirect(pi *PodInfo) (*Redirect, error) {
 	if valErr != nil {
 		return nil, fmt.Errorf("annotation value error for value %s; annotationFound = %t: %v",
 			"kubevirtInterfaces", isFound, valErr)
+	}
+	if v, found := pi.ProxyEnvironments["ISTIO_META_SUPPORT_FORWARDED"]; found {
+		// parse and set the bool value of supportForwarded
+		redir.supportForwarded, valErr = strconv.ParseBool(v)
+		if valErr != nil {
+			log.Warnf("cannot parse `support forwarded` environment variable %v", valErr)
+		}
 	}
 	if v, found := pi.ProxyEnvironments["ISTIO_META_DNS_CAPTURE"]; found {
 		// parse and set the bool value of dnsRedirect
