@@ -226,7 +226,7 @@ func (cfg *IptablesConfigurator) shortCircuitKubeInternalInterface() {
 }
 
 func (cfg *IptablesConfigurator) shortCircuitExcludeInterfaces() {
-	supportForwarded := cfg.cfg.supportForwarded
+	supportForwarded := cfg.cfg.SupportForwarded
 	for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {
 		cfg.iptables.AppendRule(
 			iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.NAT, "-i", excludeInterface, "-j", constants.RETURN)
