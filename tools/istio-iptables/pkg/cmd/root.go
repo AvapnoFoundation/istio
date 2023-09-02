@@ -150,6 +150,7 @@ func constructConfig() *config.Config {
 		ProbeTimeout:            viper.GetDuration(constants.ProbeTimeout),
 		SkipRuleApply:           viper.GetBool(constants.SkipRuleApply),
 		RunValidation:           viper.GetBool(constants.RunValidation),
+		SupportForwarded:        viper.GetBool(constants.SupportForwarded),
 		RedirectDNS:             viper.GetBool(constants.RedirectDNS),
 		DropInvalid:             viper.GetBool(constants.DropInvalid),
 		CaptureAllDNS:           viper.GetBool(constants.CaptureAllDNS),
@@ -384,7 +385,7 @@ func bindFlags(cmd *cobra.Command, args []string) {
 	if err := viper.BindPFlag(constants.SupportForwarded, cmd.Flags().Lookup(constants.SupportForwarded)); err != nil {
 		handleError(err)
 	}
-	viper.SetDefault(constants.RedirectDNS, supportForwarded)
+	viper.SetDefault(constants.SupportForwarded, supportForwarded)
 
 	if err := viper.BindPFlag(constants.RedirectDNS, cmd.Flags().Lookup(constants.RedirectDNS)); err != nil {
 		handleError(err)
