@@ -66,7 +66,9 @@ func removeOldChains(cfg *config.Config, ext dep.Dependencies, cmd string) {
 	if redirectDNS {
 		ownerGroupsFilter := types.ParseInterceptFilter(cfg.OwnerGroupsInclude, cfg.OwnerGroupsExclude)
 
-		common.HandleDNSUDP(common.DeleteOps, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
+		common.HandleDNSUDP(common.DeleteOps, constants.NAT, constants.OUTPUT, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
+			cfg.DNSServersV4, cfg.DNSServersV6, cfg.CaptureAllDNS, ownerGroupsFilter)
+		common.HandleDNSUDP(common.DeleteOps, constants.FILTER, constants.FORWARD, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
 			cfg.DNSServersV4, cfg.DNSServersV6, cfg.CaptureAllDNS, ownerGroupsFilter)
 	}
 
