@@ -42,7 +42,7 @@ var (
 		"If set to true, add support for forwarded packets").Get()
 	// Enable interception of DNS.
 	dnsCaptureByAgent = env.Register("ISTIO_META_DNS_CAPTURE", false,
-		"If set to true, enable the capture of outgoing DNS packets on port 53, redirecting to istio-agent on :15053").Get()
+		"If set to true, enable the capture of outgoing DNS packets on port 53, redirecting to istio-agent on :15053.").Get()
 	// InvalidDropByIptables is the flag to enable invalid drop iptables rule to drop the out of window packets
 	InvalidDropByIptables = env.Register("INVALID_DROP", false,
 		"If set to true, enable the invalid drop iptables rule, default false will cause iptables reset out of window packets.")
