@@ -55,6 +55,7 @@ const (
 	ACCEPT   = "ACCEPT"
 	REJECT   = "REJECT"
 	REDIRECT = "REDIRECT"
+	DNAT     ="DNAT"
 	MARK     = "MARK"
 	CT       = "CT"
 	DROP     = "DROP"
