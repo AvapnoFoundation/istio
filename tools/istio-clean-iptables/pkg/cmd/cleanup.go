@@ -61,15 +61,14 @@ func removeOldChains(cfg *config.Config, ext dep.Dependencies, cmd string) {
 	}
 	ext.RunQuietlyAndIgnore(cmd, nil, "-t", constants.NAT, "-D", constants.OUTPUT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 
+	supportForwarded := cfg.SupportForwarded
 	redirectDNS := cfg.RedirectDNS
 	// Remove the old DNS UDP rules
 	if redirectDNS {
 		ownerGroupsFilter := types.ParseInterceptFilter(cfg.OwnerGroupsInclude, cfg.OwnerGroupsExclude)
 
-		common.HandleDNSUDP(common.DeleteOps, constants.NAT, constants.OUTPUT, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
-			cfg.DNSServersV4, cfg.DNSServersV6, cfg.CaptureAllDNS, ownerGroupsFilter)
-		common.HandleDNSUDP(common.DeleteOps, constants.FILTER, constants.FORWARD, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
-			cfg.DNSServersV4, cfg.DNSServersV6, cfg.CaptureAllDNS, ownerGroupsFilter)
+		common.HandleDNSUDP(common.DeleteOps, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
+			cfg.DNSServersV4, cfg.DNSServersV6, cfg.CaptureAllDNS, ownerGroupsFilter, supportForwarded)
 	}
 
 	// Flush and delete the istio chains from NAT table.
