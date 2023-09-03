@@ -510,17 +510,10 @@ func (cfg *IptablesConfigurator) Run() {
 
 	if redirectDNS {
 		HandleDNSUDP(
-			AppendOps, constants.NAT, constants.OUTPUT, cfg.iptables, cfg.ext, "",
+			AppendOps, cfg.iptables, cfg.ext, "",
 			cfg.cfg.ProxyUID, cfg.cfg.ProxyGID,
 			cfg.cfg.DNSServersV4, cfg.cfg.DNSServersV6, cfg.cfg.CaptureAllDNS,
-			ownerGroupsFilter)
-		if supportForwarded {
-			HandleDNSUDP(
-				AppendOps, constants.FILTER, constants.FORWARD, cfg.iptables, cfg.ext, "",
-				cfg.cfg.ProxyUID, cfg.cfg.ProxyGID,
-				cfg.cfg.DNSServersV4, cfg.cfg.DNSServersV6, cfg.cfg.CaptureAllDNS,
-				ownerGroupsFilter)
-		}
+			ownerGroupsFilter, supportForwarded)
 	}
 
 	if cfg.cfg.InboundInterceptionMode == constants.TPROXY {
@@ -629,16 +622,16 @@ func (f UDPRuleApplier) WithTable(table string) UDPRuleApplier {
 // HandleDNSUDP is a helper function to tackle with DNS UDP specific operations.
 // This helps the creation logic of DNS UDP rules in sync with the deletion.
 func HandleDNSUDP(
-	ops Ops, table string, chain string, iptables *builder.IptablesBuilder, ext dep.Dependencies,
+	ops Ops, iptables *builder.IptablesBuilder, ext dep.Dependencies,
 	cmd, proxyUID, proxyGID string, dnsServersV4 []string, dnsServersV6 []string, captureAllDNS bool,
-	ownerGroupsFilter config.InterceptFilter,
+	ownerGroupsFilter config.InterceptFilter, supportForwarded bool,
 ) {
 	f := UDPRuleApplier{
 		iptables: iptables,
 		ext:      ext,
 		ops:      ops,
-		table:    table,
-		chain:    chain,
+		table:    constants.NAT,
+		chain:    constants.OUTPUT,
 		cmd:      cmd,
 	}
 	// Make sure that upstream DNS requests from agent/envoy dont get captured.
@@ -684,6 +677,33 @@ func HandleDNSUDP(
 	}
 	// Split UDP DNS traffic to separate conntrack zones
 	addConntrackZoneDNSUDP(f.WithTable(constants.RAW), proxyUID, proxyGID, dnsServersV4, dnsServersV6, captureAllDNS)
+
+	if supportForwarded {
+		f.WithChain(constants.PREROUTING);
+		if captureAllDNS {
+			// Redirect all TCP dns traffic on port 53 to the agent on port 15053
+			// This will be useful for the CNI case where pod DNS server address cannot be decided.
+			f.Run("-p", "udp", "--dport", "53", "-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
+		} else {
+			// redirect all TCP dns traffic on port 53 to the agent on port 15053 for all servers
+			// in etc/resolv.conf
+			// We avoid redirecting all IP ranges to avoid infinite loops when there are local DNS proxies
+			// such as: app -> istio dns server -> dnsmasq -> upstream
+			// This ensures that we do not get requests from dnsmasq sent back to the agent dns server in a loop.
+			// Note: If a user somehow configured etc/resolv.conf to point to dnsmasq and server X, and dnsmasq also
+			// pointed to server X, this would not work. However, the assumption is that is not a common case.
+			for _, s := range dnsServersV4 {
+				f.RunV4("-p", "udp", "--dport", "53", "-d", s+"/32",
+					"-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
+			}
+			for _, s := range dnsServersV6 {
+				f.RunV6("-p", "udp", "--dport", "53", "-d", s+"/128",
+					"-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
+			}
+		}
+		// Split UDP DNS traffic to separate conntrack zones
+		addConntrackZoneDNSUDP(f.WithTable(constants.RAW), "", "", dnsServersV4, dnsServersV6, captureAllDNS)
+	}
 }
 
 // addConntrackZoneDNSUDP is a helper function to add iptables rules to split DNS traffic
