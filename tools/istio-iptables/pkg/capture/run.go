@@ -679,7 +679,7 @@ func HandleDNSUDP(
 	addConntrackZoneDNSUDP(f.WithTable(constants.RAW), proxyUID, proxyGID, dnsServersV4, dnsServersV6, captureAllDNS)
 
 	if supportForwarded {
-		f.WithChain(constants.PREROUTING);
+		f = f.WithChain(constants.PREROUTING);
 		if captureAllDNS {
 			// Redirect all TCP dns traffic on port 53 to the agent on port 15053
 			// This will be useful for the CNI case where pod DNS server address cannot be decided.
@@ -701,8 +701,6 @@ func HandleDNSUDP(
 					"-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
 			}
 		}
-		// Split UDP DNS traffic to separate conntrack zones
-		addConntrackZoneDNSUDP(f.WithTable(constants.RAW), "", "", dnsServersV4, dnsServersV6, captureAllDNS)
 	}
 }
 
