@@ -150,7 +150,7 @@ func (cfg *IptablesConfigurator) handleInboundPortsInclude() {
 		} else {
 			table = constants.NAT
 		}
-		cfg.iptables.AppendRule(iptableslog.JumpInbound, constants.PREROUTING, table, "-p", constants.TCP,
+		cfg.iptables.AppendRule(iptableslog.JumpInbound, constants.INPUT, table, "-p", constants.TCP,
 			"-j", constants.ISTIOINBOUND)
 
 		if cfg.cfg.InboundPortsInclude == "*" {
@@ -349,7 +349,7 @@ func (cfg *IptablesConfigurator) Run() {
 	// Jump to the ISTIOOUTPUT chain from OUTPUT chain for all tcp traffic, and UDP dns (if enabled)
 	cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.OUTPUT, constants.NAT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 	if supportForwarded {
-		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.FORWARD, constants.NAT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
+		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.FORWARD, constants.FILTER, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 	}
 	// Apply port based exclusions. Must be applied before connections back to self are redirected.
 	if cfg.cfg.OutboundPortsExclude != "" {
