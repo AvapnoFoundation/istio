@@ -349,7 +349,7 @@ func (cfg *IptablesConfigurator) Run() {
 	// Jump to the ISTIOOUTPUT chain from OUTPUT chain for all tcp traffic, and UDP dns (if enabled)
 	cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.OUTPUT, constants.NAT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 	if supportForwarded {
-		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.FORWARD, constants.FILTER, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
+		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.FORWARD, constants.MANGLE, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 	}
 	// Apply port based exclusions. Must be applied before connections back to self are redirected.
 	if cfg.cfg.OutboundPortsExclude != "" {
