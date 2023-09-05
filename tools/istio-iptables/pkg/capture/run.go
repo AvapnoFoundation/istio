@@ -150,7 +150,7 @@ func (cfg *IptablesConfigurator) handleInboundPortsInclude() {
 		} else {
 			table = constants.NAT
 		}
-		cfg.iptables.AppendRule(iptableslog.JumpInbound, constants.INPUT, table, "-p", constants.TCP,
+		cfg.iptables.AppendRule(iptableslog.JumpInbound, constants.PREROUTING, table, "-p", constants.TCP,
 			"-j", constants.ISTIOINBOUND)
 
 		if cfg.cfg.InboundPortsInclude == "*" {
