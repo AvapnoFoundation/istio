@@ -226,23 +226,16 @@ func (cfg *IptablesConfigurator) shortCircuitKubeInternalInterface() {
 }
 
 func (cfg *IptablesConfigurator) shortCircuitExcludeInterfaces() {
-	supportForwarded := cfg.cfg.SupportForwarded
 	for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {
 		cfg.iptables.AppendRule(
 			iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.NAT, "-i", excludeInterface, "-j", constants.RETURN)
 		cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.OUTPUT, constants.NAT, "-o", excludeInterface, "-j", constants.RETURN)
-		if supportForwarded {
-			cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.FORWARD, constants.NAT, "-o", excludeInterface, "-j", constants.RETURN)
-		}
 	}
 	if cfg.cfg.InboundInterceptionMode == constants.TPROXY {
 		for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {
 			cfg.iptables.AppendRule(
 				iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.MANGLE, "-i", excludeInterface, "-j", constants.RETURN)
 			cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.OUTPUT, constants.MANGLE, "-o", excludeInterface, "-j", constants.RETURN)
-			if supportForwarded {
-				cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.FORWARD, constants.MANGLE, "-o", excludeInterface, "-j", constants.RETURN)
-			}
 		}
 	}
 }
@@ -349,7 +342,8 @@ func (cfg *IptablesConfigurator) Run() {
 	// Jump to the ISTIOOUTPUT chain from OUTPUT chain for all tcp traffic, and UDP dns (if enabled)
 	cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.OUTPUT, constants.NAT, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 	if supportForwarded {
-		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.FORWARD, constants.MANGLE, "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
+		// TODO: exclude additional '--dst-type's?
+		cfg.iptables.AppendRule(iptableslog.JumpOutbound, constants.PREROUTING, constants.NAT, "!", "--dst-type", "LOCAL", "-p", constants.TCP, "-j", constants.ISTIOOUTPUT)
 	}
 	// Apply port based exclusions. Must be applied before connections back to self are redirected.
 	if cfg.cfg.OutboundPortsExclude != "" {
@@ -517,27 +511,19 @@ func (cfg *IptablesConfigurator) Run() {
 	}
 
 	if cfg.cfg.InboundInterceptionMode == constants.TPROXY {
+		// TODO: add '--dst-type's to for "supportForwarded"?
 		// save packet mark set by envoy.filters.listener.original_src as connection mark
 		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.PREROUTING, constants.MANGLE,
 			"-p", constants.TCP, "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", "CONNMARK", "--save-mark")
 		// If the packet is already marked with 1337, then return. This is to prevent mark envoy --> app traffic again.
 		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 			"-p", constants.TCP, "-o", "lo", "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", constants.RETURN)
-		if supportForwarded {
-			cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
-				"-p", constants.TCP, "-o", "lo", "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", constants.RETURN)
-		}
 		for _, uid := range split(cfg.cfg.ProxyUID) {
 			// mark outgoing packets from envoy to workload by pod ip
 			// app call VIP --> envoy outbound -(mark 1338)-> envoy inbound --> app
 			cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 				"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
 				"-m", "owner", "--uid-owner", uid, "-j", constants.MARK, "--set-mark", outboundMark)
-			if supportForwarded {
-				cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
-					"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
-					"-m", "owner", "--uid-owner", uid, "-j", constants.MARK, "--set-mark", outboundMark)
-			}
 		}
 		for _, gid := range split(cfg.cfg.ProxyGID) {
 			// mark outgoing packets from envoy to workload by pod ip
@@ -545,19 +531,10 @@ func (cfg *IptablesConfigurator) Run() {
 			cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 				"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
 				"-m", "owner", "--gid-owner", gid, "-j", constants.MARK, "--set-mark", outboundMark)
-			if supportForwarded {
-				cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
-					"!", "-d", constants.IPVersionSpecific, "-p", constants.TCP, "-o", "lo",
-					"-m", "owner", "--gid-owner", gid, "-j", constants.MARK, "--set-mark", outboundMark)
-			}
 		}
 		// mark outgoing packets from workload, match it to policy routing entry setup for TPROXY mode
 		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.OUTPUT, constants.MANGLE,
 			"-p", constants.TCP, "-m", "connmark", "--mark", cfg.cfg.InboundTProxyMark, "-j", "CONNMARK", "--restore-mark")
-		if supportForwarded {
-			cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.FORWARD, constants.MANGLE,
-				"-p", constants.TCP, "-m", "connmark", "--mark", cfg.cfg.InboundTProxyMark, "-j", "CONNMARK", "--restore-mark")
-		}
 		// prevent infinite redirect
 		cfg.iptables.InsertRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.MANGLE, 1,
 			"-p", constants.TCP, "-m", "mark", "--mark", cfg.cfg.InboundTProxyMark, "-j", constants.RETURN)
@@ -679,11 +656,11 @@ func HandleDNSUDP(
 	addConntrackZoneDNSUDP(f.WithTable(constants.RAW), proxyUID, proxyGID, dnsServersV4, dnsServersV6, captureAllDNS)
 
 	if supportForwarded {
-		f = f.WithChain(constants.PREROUTING);
+		f = f.WithChain(constants.PREROUTING)
 		if captureAllDNS {
 			// Redirect all TCP dns traffic on port 53 to the agent on port 15053
 			// This will be useful for the CNI case where pod DNS server address cannot be decided.
-			f.Run("-p", "udp", "--dport", "53", "-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
+			f.Run("-p", "udp", "--dport", "53", "!", "--dst-type", "LOCAL", "-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort)
 		} else {
 			// redirect all TCP dns traffic on port 53 to the agent on port 15053 for all servers
 			// in etc/resolv.conf
@@ -693,12 +670,12 @@ func HandleDNSUDP(
 			// Note: If a user somehow configured etc/resolv.conf to point to dnsmasq and server X, and dnsmasq also
 			// pointed to server X, this would not work. However, the assumption is that is not a common case.
 			for _, s := range dnsServersV4 {
-				f.RunV4("-p", "udp", "--dport", "53", "-d", s+"/32",
-					"-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
+				f.RunV4("-p", "udp", "--dport", "53", "!", "--dst-type", "LOCAL", "-d", s+"/32",
+					"-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort)
 			}
 			for _, s := range dnsServersV6 {
-				f.RunV6("-p", "udp", "--dport", "53", "-d", s+"/128",
-					"-j", constants.DNAT, "--to-destination", "127.0.0.1:"+constants.IstioAgentDNSListenerPort)
+				f.RunV6("-p", "udp", "--dport", "53", "!", "--dst-type", "LOCAL", "-d", s+"/128",
+					"-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort)
 			}
 		}
 	}
